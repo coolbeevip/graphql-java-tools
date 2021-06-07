@@ -19,6 +19,8 @@ import graphql.schema.GraphQLScalarType
 import graphql.schema.idl.ScalarInfo
 import org.slf4j.LoggerFactory
 import java.lang.reflect.Method
+import java.util.concurrent.atomic.AtomicLong
+
 
 /**
  * @author Andrew Potter
@@ -54,6 +56,8 @@ internal class SchemaClassScanner(initialDictionary: BiMap<String, Class<*>>, al
 
     private val fieldResolversByType = mutableMapOf<ObjectTypeDefinition, MutableMap<FieldDefinition, FieldResolver>>()
 
+    private val handleRootTypeFieldCounter = AtomicLong()
+
     init {
         initialDictionary.forEach { (name, clazz) ->
             if (!definitionsByName.containsKey(name)) {
@@ -78,6 +82,8 @@ internal class SchemaClassScanner(initialDictionary: BiMap<String, Class<*>>, al
         handleRootType(rootTypeHolder.mutation)
         handleRootType(rootTypeHolder.subscription)
 
+        log.info("Schema scan Queue...")
+        var beginTime = System.currentTimeMillis();
         scanQueue()
 
         // Loop over all objects scanning each one only once for more objects to discover.
@@ -90,7 +96,7 @@ internal class SchemaClassScanner(initialDictionary: BiMap<String, Class<*>>, al
             // Require all members of discovered unions to be discovered.
             handleInterfaceOrUnionSubTypes(getAllObjectTypeMembersOfDiscoveredUnions()) { "Object type '${it.name}' is a member of a known union, but no class could be found for that type name.  Please pass a class for type '${it.name}' in the parser's dictionary." }
         } while (scanQueue())
-
+        log.info("Schema scan Queue time elapsed {}ms",System.currentTimeMillis()-beginTime);
         return validateAndCreateResult(rootTypeHolder)
     }
 
@@ -110,13 +116,15 @@ internal class SchemaClassScanner(initialDictionary: BiMap<String, Class<*>>, al
      * Adds all root resolvers for a type to the list of classes to scan
      */
     private fun handleRootType(rootType: RootType?) {
+        val beginTime = System.currentTimeMillis()
         if (rootType == null) {
             return
         }
-
+        log.info("Schema scan {}...", rootType.name)
         unvalidatedTypes.add(rootType.type)
         scanInterfacesOfType(rootType.type)
         scanResolverInfoForPotentialMatches(rootType.type, rootType.resolverInfo)
+        log.info("Schema scan {} field {}, time elapsed {}ms", rootType.name, handleRootTypeFieldCounter.getAndSet(0), System.currentTimeMillis() - beginTime)
     }
 
     private fun validateAndCreateResult(rootTypeHolder: RootTypesHolder): ScannedSchemaObjects {
@@ -253,6 +261,8 @@ internal class SchemaClassScanner(initialDictionary: BiMap<String, Class<*>>, al
 
     private fun scanResolverInfoForPotentialMatches(type: ObjectTypeDefinition, resolverInfo: ResolverInfo) {
         type.getExtendedFieldDefinitions(extensionDefinitions).forEach { field ->
+            handleRootTypeFieldCounter.incrementAndGet();
+            //log.info("Resolver Field {}.{}, total {}",field.type,field.name, counter)
             //            val searchField = applyDirective(field)
             val fieldResolver = fieldResolverScanner.findFieldResolver(field, resolverInfo)
 
