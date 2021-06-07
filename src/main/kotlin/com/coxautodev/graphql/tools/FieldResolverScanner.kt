@@ -86,7 +86,7 @@ internal class FieldResolverScanner(val options: SchemaParserOptions) {
         val methods = getAllMethods(search.type)
         val argumentCount = field.inputValueDefinitions.size + if (search.requiredFirstParameterType != null) 1 else 0
         val name = field.name
-
+        var fName = name.capitalize();
         val isBoolean = isBoolean(field.type)
 
         // Check for the following one by one:
@@ -95,13 +95,10 @@ internal class FieldResolverScanner(val options: SchemaParserOptions) {
         //   3. Method with "get" style getter
         //   4. Method with "getField" style getter
         return methods.find {
-            it.name == name && verifyMethodArguments(it, argumentCount, search)
-        } ?: methods.find {
-            (isBoolean && it.name == "is${name.capitalize()}") && verifyMethodArguments(it, argumentCount, search)
-        } ?: methods.find {
-            it.name == "get${name.capitalize()}" && verifyMethodArguments(it, argumentCount, search)
-        } ?: methods.find {
-            it.name == "getField${name.capitalize()}" && verifyMethodArguments(it, argumentCount, search)
+          (it.name == name ||
+              (isBoolean && it.name == "is$fName") ||
+              it.name == "get$fName" ||
+              it.name == "getField$fName") && verifyMethodArguments(it, argumentCount, search)
         }
     }
 
